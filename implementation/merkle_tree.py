@@ -96,14 +96,16 @@ class MerkleTree:
         Verify a Merkle path.
         
         Args:
-            leaf: The leaf value
+            leaf: The leaf value (already a hash from create_user_identifier)
             path: List of (sibling_hash, is_right) tuples
             root: Expected root hash
             
         Returns:
             True if path is valid, False otherwise
         """
-        current_hash = self._hash(leaf)
+        # Leaf is already a hash (from create_user_identifier), use it directly
+        # The Merkle tree stores leaves as-is and hashes them when building parent nodes
+        current_hash = leaf
         
         for sibling_hash, is_right in path:
             if is_right:

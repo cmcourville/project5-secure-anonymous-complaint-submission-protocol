@@ -56,7 +56,8 @@ class UserRegistration:
     def _verify_merkle_path(self) -> bool:
         """Verify that Merkle path is valid for public identifier."""
         # Verify path for public leaf (authority knows this)
-        current_hash = self._hash(self.public_leaf)
+        # public_leaf is already a hash (from create_user_identifier), use it directly
+        current_hash = self.public_leaf
         
         for sibling_hash, is_right in self.merkle_path:
             if is_right:

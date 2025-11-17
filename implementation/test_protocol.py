@@ -99,7 +99,9 @@ def test_complete_protocol():
     # Bulletin Board
     print("\n[5] BULLETIN BOARD")
     print("-" * 60)
-    board = BulletinBoard(verifier)
+    # Create fresh verifier for bulletin board (or board will reuse same nullifier set)
+    board_verifier = SubmissionVerifier(rsa_n, rsa_e, merkle_root)
+    board = BulletinBoard(board_verifier)
     board_result = board.add_submission(submission)
     
     if board_result['overall_valid']:
@@ -119,7 +121,8 @@ def test_complete_protocol():
     duplicate_submission = submission_handler.submit_complaint(
         "Duplicate complaint", round_id
     )
-    duplicate_results = verifier.verify_submission(duplicate_submission)
+    # Use board verifier to check duplicate (it already has the first nullifier)
+    duplicate_results = board_verifier.verify_submission(duplicate_submission)
     
     if not duplicate_results['nullifier_unique']:
         print("✓ Duplicate submission correctly rejected")

@@ -92,12 +92,12 @@ class ZKProofGenerator:
         # Commit to signature
         sig_commitment = hashlib.sha256(
             str(self.signature).encode() + self.secret
-        ).hex()
+        ).digest().hex()
         
         # Commit to Merkle path
         path_commitment = hashlib.sha256(
             str(self.merkle_path).encode() + self.secret
-        ).hex()
+        ).digest().hex()
         
         # Create challenge (in interactive proof, this would be from verifier)
         challenge = hashlib.sha256(
@@ -107,7 +107,7 @@ class ZKProofGenerator:
         # Create response (simplified)
         response = hashlib.sha256(
             challenge + self.secret
-        ).hex()
+        ).digest().hex()
         
         return {
             'sig_commitment': sig_commitment,

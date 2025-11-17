@@ -94,6 +94,10 @@ class SubmissionVerifier:
             'overall_valid': False
         }
         
+        # Check for required fields
+        if 'proof' not in submission or 'nullifier' not in submission:
+            return results  # Missing required fields, all checks fail
+        
         # Verify proof
         results['proof_valid'] = self.verify_proof(
             submission['proof'], 
