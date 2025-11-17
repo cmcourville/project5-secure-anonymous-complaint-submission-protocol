@@ -122,17 +122,25 @@ class MerkleTree:
         return len(self.leaves)
 
 
-def create_user_identifier(user_id: str, secret: bytes) -> bytes:
+def create_user_identifier(user_id: str, secret: bytes = None) -> bytes:
     """
     Create a unique identifier for a user in the Merkle tree.
     
+    For public Merkle tree (authority knows), use only user_id.
+    For user commitment (user knows secret), use user_id + secret.
+    
     Args:
         user_id: Public user identifier
-        secret: User's secret value
+        secret: User's secret value (optional, for commitment)
         
     Returns:
-        Hash of user_id and secret
+        Hash of user_id (and secret if provided)
     """
-    combined = user_id.encode() + secret
-    return hashlib.sha256(combined).digest()
+    if secret is None:
+        # Public identifier (authority knows this)
+        return hashlib.sha256(user_id.encode()).digest()
+    else:
+        # User commitment (authority doesn't know secret)
+        combined = user_id.encode() + secret
+        return hashlib.sha256(combined).digest()
 

@@ -40,14 +40,17 @@ class AuthoritySetup:
         self.rsa_key = RSA.generate(self.key_size)
         return self.rsa_key, self.rsa_key.publickey()
     
-    def add_authorized_users(self, users: List[Dict[str, bytes]]):
+    def add_authorized_users(self, user_ids: List[str]):
         """
         Add authorized users to the system.
         
+        IMPORTANT: Authority only knows public user_ids, NOT secrets.
+        Users will generate their own secrets during registration.
+        
         Args:
-            users: List of dicts with 'user_id' and 'secret' keys
+            user_ids: List of public user identifiers (e.g., student IDs, usernames)
         """
-        self.authorized_users = users
+        self.authorized_users = [{'user_id': uid} for uid in user_ids]
     
     def build_merkle_tree(self) -> bytes:
         """
@@ -60,11 +63,13 @@ class AuthoritySetup:
             raise ValueError("No authorized users added")
         
         # Create leaf identifiers for each user
+        # IMPORTANT: Use only public user_id, NOT secrets
+        # Authority should never know user secrets
         leaves = []
         for user in self.authorized_users:
             user_id = user['user_id']
-            secret = user['secret']
-            leaf = create_user_identifier(user_id, secret)
+            # Build tree from public identifiers only
+            leaf = create_user_identifier(user_id, secret=None)
             leaves.append(leaf)
         
         # Build Merkle tree
@@ -147,14 +152,9 @@ def example_setup():
     private_key, public_key = authority.generate_rsa_keys()
     print(f"Generated RSA keys (size: {authority.key_size} bits)")
     
-    # Add authorized users
-    users = [
-        {'user_id': 'student1', 'secret': b'secret1'},
-        {'user_id': 'student2', 'secret': b'secret2'},
-        {'user_id': 'student3', 'secret': b'secret3'},
-        {'user_id': 'student4', 'secret': b'secret4'},
-    ]
-    authority.add_authorized_users(users)
+    # Add authorized users (authority only knows public IDs, not secrets)
+    user_ids = ['student1', 'student2', 'student3', 'student4']
+    authority.add_authorized_users(user_ids)
     
     # Build Merkle tree
     root = authority.build_merkle_tree()

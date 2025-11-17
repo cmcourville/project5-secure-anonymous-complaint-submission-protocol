@@ -148,16 +148,21 @@ class ZKProofGenerator:
 class ComplaintSubmission:
     """Handles complaint submission."""
     
-    def __init__(self, credential: Dict, rsa_n: int, rsa_e: int):
+    def __init__(self, credential: Dict, secret: bytes, rsa_n: int, rsa_e: int):
         """
         Initialize complaint submission.
         
+        IMPORTANT: User must provide their secret separately.
+        Secret is NOT stored in credential (authority never knows it).
+        
         Args:
-            credential: User's credential from registration
+            credential: User's credential from registration (does NOT contain secret)
+            secret: User's secret (stored separately by user, unknown to authority)
             rsa_n: RSA modulus (public)
             rsa_e: RSA exponent (public)
         """
         self.credential = credential
+        self.secret = secret  # User's secret, stored separately
         self.rsa_n = rsa_n
         self.rsa_e = rsa_e
     
@@ -176,21 +181,17 @@ class ComplaintSubmission:
         signature = self.credential['signature']
         merkle_path = self.credential['merkle_path']
         merkle_root = bytes.fromhex(self.credential['merkle_root'])
+        user_id = self.credential['user_id']
         
-        # Note: In real implementation, we'd need secret and user_id
-        # For this simplified version, we'll use the stored hash
-        # In practice, these would be stored securely by the user
-        
-        # Generate nullifier
-        # Note: This requires the secret, which should be stored securely
-        # For demonstration, we'll create a placeholder
-        secret = b'user_secret'  # In practice, retrieved from secure storage
-        nullifier = NullifierGenerator.generate_nullifier(secret, round_id)
+        # Generate nullifier from user's secret
+        # Authority cannot compute this because it doesn't know the secret
+        nullifier = NullifierGenerator.generate_nullifier(self.secret, round_id)
         
         # Generate ZK-proof
         # Note: Full implementation would use proper zk-SNARKs
+        # This proves user has valid credential without revealing secret or identity
         zk_proof_gen = ZKProofGenerator(
-            signature, secret, 'user', merkle_path, merkle_root, self.rsa_n, self.rsa_e
+            signature, self.secret, user_id, merkle_path, merkle_root, self.rsa_n, self.rsa_e
         )
         proof = zk_proof_gen.generate_proof(nullifier)
         
@@ -210,17 +211,18 @@ def example_submission():
     """Example usage of submission phase."""
     from .setup import AuthoritySetup
     from .registration import RegistrationProtocol
+    from Crypto.Random import get_random_bytes
     
     # Setup
     authority = AuthoritySetup()
     authority.generate_rsa_keys()
-    users = [{'user_id': 'student1', 'secret': b'secret1'}]
-    authority.add_authorized_users(users)
+    user_ids = ['student1']
+    authority.add_authorized_users(user_ids)
     authority.build_merkle_tree()
     
     # Registration
     user_id = 'student1'
-    secret = b'secret1'
+    secret = get_random_bytes(32)  # User generates secret (authority never knows)
     merkle_path = authority.get_user_merkle_path(0)
     merkle_root = authority.merkle_tree.root
     rsa_n = authority.rsa_key.n
@@ -232,7 +234,8 @@ def example_submission():
     )
     
     # Submission
-    submission_handler = ComplaintSubmission(credential, rsa_n, rsa_e)
+    # IMPORTANT: User must provide secret separately (stored securely by user)
+    submission_handler = ComplaintSubmission(credential, secret, rsa_n, rsa_e)
     complaint = "This is a test complaint about academic misconduct."
     round_id = "round_2024_01"
     
@@ -242,6 +245,7 @@ def example_submission():
     print(f"Complaint: {submission['complaint']}")
     print(f"Nullifier: {submission['nullifier']}")
     print(f"Proof: {submission['proof']}")
+    print("Note: Authority cannot link this to user because it doesn't know secret")
     
     return submission
 

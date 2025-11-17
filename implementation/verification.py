@@ -239,12 +239,13 @@ def example_verification():
     from .setup import AuthoritySetup
     from .registration import RegistrationProtocol
     from .submission import ComplaintSubmission
+    from Crypto.Random import get_random_bytes
     
     # Setup
     authority = AuthoritySetup()
     authority.generate_rsa_keys()
-    users = [{'user_id': 'student1', 'secret': b'secret1'}]
-    authority.add_authorized_users(users)
+    user_ids = ['student1']
+    authority.add_authorized_users(user_ids)
     authority.build_merkle_tree()
     
     params = authority.get_public_parameters()
@@ -254,7 +255,7 @@ def example_verification():
     
     # Registration
     user_id = 'student1'
-    secret = b'secret1'
+    secret = get_random_bytes(32)  # User generates secret (authority never knows)
     merkle_path = authority.get_user_merkle_path(0)
     
     credential = RegistrationProtocol.register_user(
@@ -263,7 +264,8 @@ def example_verification():
     )
     
     # Submission
-    submission_handler = ComplaintSubmission(credential, rsa_n, rsa_e)
+    # User provides secret separately (stored securely by user)
+    submission_handler = ComplaintSubmission(credential, secret, rsa_n, rsa_e)
     submission = submission_handler.submit_complaint(
         "Test complaint", "round_2024_01"
     )
