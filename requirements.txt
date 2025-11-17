@@ -4,4 +4,5 @@ petlib==0.0.41
 numpy==1.24.3
 matplotlib==3.7.2
 pytest==7.4.3
+pytest-cov==4.1.0
 
