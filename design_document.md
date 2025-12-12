@@ -55,18 +55,36 @@ The protocol consists of four main phases:
 
 2. Authority creates list of authorized users $U = \{u_1, u_2, ..., u_n\}$
 
-3. For each user $u_i$:
-   - Compute leaf identifier: $L_i = H(u_i || s_i)$ where $s_i$ is user's secret
+3. **User Commitment Phase** (Critical for ZK-proof binding):
+   - Each user $u_i$ generates secret $s_i$ and computes commitment: $C_i = H(u_i || s_i)$
+   - Users send commitments $\{C_1, C_2, ..., C_n\}$ to authority
+   - Authority receives commitments but does NOT learn secrets $s_i$
+
+4. For each user $u_i$:
+   - Use commitment $C_i = H(u_i || s_i)$ as leaf identifier
    - Store Merkle path $\pi_i$ for user
 
-4. Build Merkle tree $MT$ with leaves $\{L_1, L_2, ..., L_n\}$
+5. Build Merkle tree $MT$ with leaves $\{C_1, C_2, ..., C_n\}$ where $C_i = H(u_i || s_i)$
 
-5. Publish public parameters:
+**IMPORTANT**: Building the tree from $H(u_i || s_i)$ instead of $H(u_i)$ binds all ZK-proof components together:
+- Merkle path proves membership of $H(u_i || s_i)$
+- RSA signature is on $H(u_i || s_i)$
+- Nullifier uses $s_i$: $N = H(s_i || \text{round\_id})$
+This ensures the same secret $s_i$ is used throughout, preventing proof component mixing attacks.
+
+6. Publish public parameters:
    - RSA public key: $(n, e)$
    - Merkle root: $R = \text{root}(MT)$
    - Tree depth: $d$
 
 **Output**: Public parameters $PP = (n, e, R, d)$
+
+**Note on RSA Signatures**: For production use, RSA signatures should use padding schemes (e.g., RSA-PSS or RSA-PKCS#1 v1.5) to prevent:
+- Small message recovery attacks
+- Homomorphic signature forgery (computing $\text{sign}(m_1) \cdot \text{sign}(m_2) = \text{sign}(m_1 \cdot m_2)$)
+- Non-uniform distribution across the modulus
+
+Blind signatures with padding are more complex but still possible. This implementation uses raw RSA for simplicity, but the design should specify padding for production deployments.
 
 ### 3.2 Registration Phase
 
@@ -77,10 +95,10 @@ The protocol consists of four main phases:
 **Steps**:
 
 1. **User → Authority**: Registration request
-   - User computes: $m = H(s_i || u_i) \bmod n$
+   - User computes token: $m = H(u_i || s_i) \bmod n$ (matches Merkle tree leaf)
    - User generates random blinding factor: $r \xleftarrow{\$} \mathbb{Z}_n^*$
    - User blinds token: $m' = m \cdot r^e \bmod n$
-   - User sends: $(m', \pi_i)$ where $\pi_i$ is Merkle path
+   - User sends: $(m', \pi_i)$ where $\pi_i$ is Merkle path for $H(u_i || s_i)$
 
 2. **Authority**: Verifies and signs
    - Authority verifies Merkle path $\pi_i$ against root $R$
@@ -109,9 +127,16 @@ The protocol consists of four main phases:
 
 2. User generates zero-knowledge proof $\pi_{zk}$ proving:
    - "I know $(\sigma, s_i, \pi_i)$ such that:
-     - $\sigma^e = H(s_i || u_i) \bmod n$ (valid credential)
-     - $\pi_i$ is valid Merkle path to root $R$
+     - $\sigma^e = H(u_i || s_i) \bmod n$ (valid credential)
+     - $\pi_i$ is valid Merkle path to root $R$ for $H(u_i || s_i)$
      - $N = H(s_i || \text{round\_id})$ (nullifier computation)"
+   
+   **Critical Binding**: All three components use the same secret $s_i$:
+   - Merkle path proves membership of $H(u_i || s_i)$
+   - Signature is on $H(u_i || s_i)$
+   - Nullifier uses $s_i$ directly
+   
+   This cryptographic binding prevents mixing proof components from different credentials.
 
 3. User submits to bulletin board:
    - Complaint text: $C$
@@ -199,7 +224,27 @@ The protocol consists of four main phases:
 - Sybil attacks: Prevented by Merkle tree membership (requires authorized user)
 - Replay attacks: Prevented by round ID in nullifier
 
-### 4.4 Verifiability
+**Design Consideration**: The requirement for one complaint per user per round may be too restrictive for some use cases (e.g., ethics complaint systems where multiple incidents should be reportable). Consider:
+- Allowing multiple complaints per user per round (tracked via different nullifiers)
+- Using complaint categories or types to allow multiple submissions
+- Implementing a complaint limit (e.g., maximum 3 complaints per round per user)
+
+### 4.4 Proof Component Binding
+
+**Definition**: All components of the ZK-proof must be cryptographically bound to the same secret.
+
+**Analysis**:
+- **Problem**: If Merkle tree uses $H(u_i)$ but signature uses $H(u_i || s_i)$, proof components are not bound
+- **Attack**: Attacker could mix valid Merkle path from one user with signature from another
+- **Solution**: Build Merkle tree from $H(u_i || s_i)$, ensuring:
+  - Merkle path proves membership of $H(u_i || s_i)$
+  - Signature is on $H(u_i || s_i)$
+  - Nullifier uses $s_i$: $N = H(s_i || \text{round\_id})$
+- All three components now cryptographically linked via the same secret $s_i$
+
+**Security Guarantee**: The binding ensures that a valid proof can only be created by someone who knows the secret $s_i$ that matches both the Merkle tree membership and the signature.
+
+### 4.5 Verifiability
 
 **Definition**: Anyone can verify that all valid complaints were included and no invalid ones were injected.
 
@@ -268,9 +313,34 @@ The protocol consists of four main phases:
 - Circuit design for credential verification
 - Merkle path verification in circuit
 - Nullifier computation in circuit
+- **Critical**: Circuit must verify all components use same secret $s_i$
 - Trusted setup (or use STARKs for transparent setup)
 
-### 6.2 Bulletin Board
+**Proof Binding**: The zk-SNARK circuit must enforce that:
+- Merkle path is for $H(u_i || s_i)$
+- Signature verifies for $H(u_i || s_i)$
+- Nullifier is $H(s_i || \text{round\_id})$
+- All use the same secret $s_i$ (binding constraint)
+
+### 6.2 RSA Signature Padding
+
+**Current Implementation**: Raw RSA signatures (no padding)
+
+**Security Issues**:
+- Small messages vulnerable to recovery
+- Homomorphic property: $\text{sign}(m_1) \cdot \text{sign}(m_2) = \text{sign}(m_1 \cdot m_2)$
+- Non-uniform distribution across modulus
+
+**Production Requirement**: Use RSA-PSS (Probabilistic Signature Scheme) or RSA-PKCS#1 v1.5
+
+**Blind Signature Challenge**: Padding with blind signatures is complex but possible:
+- PSS padding can be applied before blinding
+- Requires careful implementation to maintain blindness
+- Standard libraries (e.g., PyCryptodome) support PSS with proper setup
+
+**Note**: This implementation uses raw RSA for simplicity, but production deployments MUST use padding.
+
+### 6.3 Bulletin Board
 
 **Current Implementation**: Centralized bulletin board
 
@@ -291,6 +361,41 @@ The protocol consists of four main phases:
 **Bottlenecks**:
 - Registration requires interaction with authority
 - ZK-proof generation (can be precomputed)
+
+### 6.5 Membership Changes and Tree Rebuilding
+
+**Problem**: Merkle tree must be rebuilt when membership changes, requiring:
+- All users to re-register with new Merkle paths
+- New round to be started (old credentials invalidated)
+- Coordination overhead
+
+**Impact**:
+- In dynamic environments (schools, corporations), membership changes daily
+- Frequent tree rebuilding causes system churn
+- Users must re-register frequently
+
+**Solutions**:
+1. **Round-based Membership**: Only update membership at round boundaries
+   - New users wait until next round
+   - Removed users' credentials expire at round end
+   - Reduces churn but delays access
+
+2. **Sparse Merkle Trees**: Use sparse Merkle trees for efficient updates
+   - O(log n) update time instead of O(n) rebuild
+   - Allows incremental membership changes
+   - More complex implementation
+
+3. **Credential Expiration**: Issue time-limited credentials
+   - Credentials expire after fixed period
+   - Users re-register periodically
+   - Balances security and convenience
+
+4. **Membership Windows**: Allow membership changes only during specific periods
+   - E.g., monthly membership update windows
+   - Reduces frequency of tree rebuilding
+   - Requires planning ahead
+
+**Recommendation**: For production systems, implement round-based membership with sparse Merkle trees for better scalability.
 
 ---
 
@@ -389,14 +494,20 @@ The protocol consists of four main phases:
 $$PP = \text{Setup}(U) = (n, e, R, d)$$
 
 **Registration**:
-$$m = H(s_i || u_i) \bmod n$$
-$$m' = m \cdot r^e \bmod n$$
-$$\sigma' = (m')^d \bmod n$$
-$$\sigma = \sigma' \cdot r^{-1} \bmod n$$
+$$C_i = H(u_i || s_i) \quad \text{(user commitment)}$$
+$$m = H(u_i || s_i) \bmod n \quad \text{(token matches commitment)}$$
+$$m' = m \cdot r^e \bmod n \quad \text{(blinding)}$$
+$$\sigma' = (m')^d \bmod n \quad \text{(authority signs)}$$
+$$\sigma = \sigma' \cdot r^{-1} \bmod n \quad \text{(unblinding)}$$
 
 **Submission**:
 $$N = H(s_i || \text{round\_id})$$
-$$\pi_{zk} = \text{Prove}((\sigma, s_i, \pi_i) : \text{valid\_credential} \land \text{valid\_path} \land N = H(s_i || \text{round\_id}))$$
+$$\pi_{zk} = \text{Prove}((\sigma, s_i, \pi_i) : \sigma^e = H(u_i || s_i) \bmod n \land \text{valid\_path}(\pi_i, H(u_i || s_i), R) \land N = H(s_i || \text{round\_id}))$$
+
+**Binding Constraint**: All components must use the same secret $s_i$:
+- Merkle path is for $H(u_i || s_i)$
+- Signature is on $H(u_i || s_i)$
+- Nullifier uses $s_i$
 
 **Verification**:
 $$\text{Verify}(\pi_{zk}, PP) \land N \notin \text{used\_nullifiers}$$
