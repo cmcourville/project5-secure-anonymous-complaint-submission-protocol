@@ -52,9 +52,34 @@ class AuthoritySetup:
         """
         self.authorized_users = [{'user_id': uid} for uid in user_ids]
     
-    def build_merkle_tree(self) -> bytes:
+    def collect_user_commitments(self, user_commitments: List[bytes]):
+        """
+        Collect user commitments for Merkle tree construction.
+        
+        Users send H(user_id || secret) to authority before tree is built.
+        Authority receives commitments but doesn't know secrets.
+        This binds the Merkle tree membership to the secret used in signatures.
+        
+        Args:
+            user_commitments: List of commitment hashes H(user_id || secret)
+        """
+        if len(user_commitments) != len(self.authorized_users):
+            raise ValueError("Number of commitments must match number of users")
+        
+        for i, user in enumerate(self.authorized_users):
+            user['commitment'] = user_commitments[i]
+    
+    def build_merkle_tree(self, use_commitments: bool = False) -> bytes:
         """
         Build Merkle tree from authorized users.
+        
+        If use_commitments=True, builds tree from user commitments H(user_id || secret).
+        This binds Merkle tree membership to secrets, fixing the ZK-proof binding issue.
+        
+        If use_commitments=False, uses legacy H(user_id) only (for backward compatibility).
+        
+        Args:
+            use_commitments: If True, use commitments H(user_id || secret) for tree leaves
         
         Returns:
             Merkle root hash
@@ -62,14 +87,18 @@ class AuthoritySetup:
         if not self.authorized_users:
             raise ValueError("No authorized users added")
         
-        # Create leaf identifiers for each user
-        # IMPORTANT: Use only public user_id, NOT secrets
-        # Authority should never know user secrets
         leaves = []
         for user in self.authorized_users:
             user_id = user['user_id']
-            # Build tree from public identifiers only
-            leaf = create_user_identifier(user_id, secret=None)
+            if use_commitments:
+                if 'commitment' not in user:
+                    raise ValueError("User commitments must be collected before building tree with commitments")
+                # Build tree from commitments H(user_id || secret)
+                # This binds tree membership to the secret
+                leaf = user['commitment']
+            else:
+                # Legacy: Build tree from public identifiers only
+                leaf = create_user_identifier(user_id, secret=None)
             leaves.append(leaf)
         
         # Build Merkle tree
@@ -141,6 +170,26 @@ class AuthoritySetup:
         """Load public parameters from file."""
         with open(filename, 'r') as f:
             return json.load(f)
+    
+    @staticmethod
+    def create_user_commitment(user_id: str, secret: bytes) -> bytes:
+        """
+        Create user commitment for Merkle tree construction.
+        
+        This creates H(user_id || secret) which binds the Merkle tree membership
+        to the secret used in signatures, fixing the ZK-proof binding issue.
+        
+        Users should call this and send the commitment to authority before
+        the Merkle tree is built.
+        
+        Args:
+            user_id: User identifier
+            secret: User's secret value
+            
+        Returns:
+            Commitment hash H(user_id || secret)
+        """
+        return create_user_identifier(user_id, secret)
 
 
 def example_setup():

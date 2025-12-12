@@ -74,9 +74,15 @@ class ZKProofGenerator:
         
         In a full implementation, this would use zk-SNARKs to prove:
         - "I know (signature, secret, merkle_path) such that:
-            - signature is valid RSA signature on H(secret || user_id)
-            - merkle_path is valid path to merkle_root
+            - signature is valid RSA signature on H(user_id || secret)
+            - merkle_path is valid path to merkle_root for H(user_id || secret)
             - nullifier = H(secret || round_id)"
+        
+        NOTE: The Merkle tree should be built using H(user_id || secret) to bind
+        all proof components together. This ensures the same secret is used in:
+        - Merkle tree membership proof
+        - RSA signature verification
+        - Nullifier computation
         
         This simplified version creates a commitment-based proof.
         
@@ -166,9 +172,42 @@ class ComplaintSubmission:
         self.rsa_n = rsa_n
         self.rsa_e = rsa_e
     
+    def prepare_complaint_submission(self, complaint_text: str, round_id: str) -> Dict:
+        """
+        Prepare complaint submission data.
+        
+        This generates all the data needed to submit a complaint, but does not
+        actually submit it to a bulletin board. The submission must be sent to
+        a bulletin board separately.
+        
+        Args:
+            complaint_text: The complaint content
+            round_id: Identifier for the submission round
+            
+        Returns:
+            Submission dictionary ready to be sent to bulletin board
+        """
+        return self._create_submission(complaint_text, round_id)
+    
     def submit_complaint(self, complaint_text: str, round_id: str) -> Dict:
         """
-        Submit a complaint anonymously.
+        Prepare complaint submission data.
+        
+        DEPRECATED: Use prepare_complaint_submission() for clarity.
+        Kept for backward compatibility.
+        
+        Args:
+            complaint_text: The complaint content
+            round_id: Identifier for the submission round
+            
+        Returns:
+            Submission dictionary
+        """
+        return self.prepare_complaint_submission(complaint_text, round_id)
+    
+    def _create_submission(self, complaint_text: str, round_id: str) -> Dict:
+        """
+        Internal method to create submission data.
         
         Args:
             complaint_text: The complaint content
@@ -190,6 +229,11 @@ class ComplaintSubmission:
         # Generate ZK-proof
         # Note: Full implementation would use proper zk-SNARKs
         # This proves user has valid credential without revealing secret or identity
+        # The proof binds together:
+        # - RSA signature on H(user_id || secret)
+        # - Merkle path for H(user_id || secret) 
+        # - Nullifier H(secret || round_id)
+        # All using the same secret value
         zk_proof_gen = ZKProofGenerator(
             signature, self.secret, user_id, merkle_path, merkle_root, self.rsa_n, self.rsa_e
         )

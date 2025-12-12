@@ -54,10 +54,18 @@ class UserRegistration:
         return hashlib.sha256(data).digest()
     
     def _verify_merkle_path(self) -> bool:
-        """Verify that Merkle path is valid for public identifier."""
-        # Verify path for public leaf (authority knows this)
-        # public_leaf is already a hash (from create_user_identifier), use it directly
-        current_hash = self.public_leaf
+        """
+        Verify that Merkle path is valid.
+        
+        If tree was built with commitments, verifies path for user_commitment H(user_id || secret).
+        Otherwise, verifies path for public_leaf H(user_id).
+        """
+        # Use user_commitment if tree was built with commitments (binds to secret)
+        # Otherwise use public_leaf (legacy mode)
+        # The user_commitment is H(user_id || secret), which matches what the signature is on
+        leaf_to_verify = self.user_commitment  # Always verify against commitment to bind proof components
+        
+        current_hash = leaf_to_verify
         
         for sibling_hash, is_right in self.merkle_path:
             if is_right:

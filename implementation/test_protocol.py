@@ -34,9 +34,24 @@ def test_complete_protocol():
     authority.add_authorized_users(user_ids)
     print(f"✓ Added {len(user_ids)} authorized users")
     
-    # Build Merkle tree
-    root = authority.build_merkle_tree()
-    print(f"✓ Built Merkle tree (root: {root.hex()[:16]}...)")
+    # User Commitment Phase (fixes ZK-proof binding issue)
+    print("\n[1a] USER COMMITMENT PHASE")
+    print("-" * 60)
+    from implementation.merkle_tree import create_user_identifier
+    user_secrets = {}
+    commitments = []
+    for user_id in user_ids:
+        secret = get_random_bytes(32)
+        commitment = create_user_identifier(user_id, secret)
+        user_secrets[user_id] = secret
+        commitments.append(commitment)
+        print(f"✓ User '{user_id}' generated commitment (secret unknown to authority)")
+    
+    # Collect commitments and build tree with bindings
+    authority.collect_user_commitments(commitments)
+    root = authority.build_merkle_tree(use_commitments=True)
+    print(f"✓ Built Merkle tree from commitments (root: {root.hex()[:16]}...)")
+    print("  Note: Tree uses H(user_id || secret) to bind proof components")
     
     # Get public parameters
     params = authority.get_public_parameters()
@@ -48,8 +63,8 @@ def test_complete_protocol():
     from Crypto.Random import get_random_bytes
     
     user_id = 'student1'
-    # User generates their own secret (authority never learns this)
-    secret = get_random_bytes(32)
+    # Use the secret from commitment phase (authority never learned this)
+    secret = user_secrets[user_id]
     merkle_path = authority.get_user_merkle_path(0)
     merkle_root = authority.merkle_tree.root
     rsa_n = authority.rsa_key.n

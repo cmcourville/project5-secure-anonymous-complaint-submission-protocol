@@ -61,9 +61,51 @@ class SubmissionVerifier:
         
         return True
     
+    def is_nullifier_unique(self, nullifier: str) -> bool:
+        """
+        Check if nullifier has been used before (read-only check).
+        
+        Args:
+            nullifier: The nullifier to check
+            
+        Returns:
+            True if nullifier is unique (not used), False if already used
+        """
+        return nullifier not in self.used_nullifiers
+    
+    def record_nullifier(self, nullifier: str) -> None:
+        """
+        Record a nullifier as used.
+        
+        Args:
+            nullifier: The nullifier to record
+        """
+        self.used_nullifiers.add(nullifier)
+    
+    def check_and_record_nullifier(self, nullifier: str) -> bool:
+        """
+        Check if nullifier is unique and record it if so.
+        
+        This combines the check and record operations for convenience.
+        
+        Args:
+            nullifier: The nullifier to check and record
+            
+        Returns:
+            True if nullifier was unique and is now recorded, False if already used
+        """
+        if nullifier in self.used_nullifiers:
+            return False
+        
+        self.used_nullifiers.add(nullifier)
+        return True
+    
     def verify_nullifier_uniqueness(self, nullifier: str) -> bool:
         """
-        Verify that nullifier hasn't been used before.
+        Verify that nullifier hasn't been used before and record it.
+        
+        DEPRECATED: Use check_and_record_nullifier() for clarity.
+        Kept for backward compatibility.
         
         Args:
             nullifier: The nullifier to check
@@ -71,11 +113,7 @@ class SubmissionVerifier:
         Returns:
             True if nullifier is unique, False if already used
         """
-        if nullifier in self.used_nullifiers:
-            return False
-        
-        self.used_nullifiers.add(nullifier)
-        return True
+        return self.check_and_record_nullifier(nullifier)
     
     def verify_submission(self, submission: Dict) -> Dict[str, bool]:
         """
