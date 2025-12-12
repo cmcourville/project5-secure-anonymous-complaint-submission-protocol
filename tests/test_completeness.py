@@ -151,7 +151,8 @@ class TestCompleteness:
             assert result['overall_valid'] is True
         
         # Try to add invalid submission
-        invalid = valid_submissions[0].copy()
+        import copy
+        invalid = copy.deepcopy(valid_submissions[0])
         invalid['proof']['challenge'] = 'corrupted'
         result = board.add_submission(invalid)
         assert result['overall_valid'] is False

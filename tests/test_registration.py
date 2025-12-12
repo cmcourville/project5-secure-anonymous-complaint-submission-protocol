@@ -14,12 +14,12 @@ class TestUserRegistration:
     
     @pytest.fixture
     def authority_setup(self):
-        """Create authority setup for testing."""
-        authority = AuthoritySetup(key_size=1024)
-        authority.generate_rsa_keys()
+        """Create authority setup for testing with commitment-based tree."""
+        from tests.conftest import setup_authority_with_commitments
         user_ids = ['student1', 'student2', 'student3']
-        authority.add_authorized_users(user_ids)
-        authority.build_merkle_tree()
+        authority, user_secrets = setup_authority_with_commitments(user_ids, key_size=1024)
+        # Store user secrets in authority for test access
+        authority._test_user_secrets = user_secrets
         return authority
     
     def test_user_generates_secret(self):
@@ -35,7 +35,8 @@ class TestUserRegistration:
     def test_user_registration_initialization(self, authority_setup):
         """Test user registration initialization."""
         user_id = 'student1'
-        secret = get_random_bytes(32)
+        # Use the secret from the commitment-based setup
+        secret = authority_setup._test_user_secrets[user_id]['secret']
         merkle_path = authority_setup.get_user_merkle_path(0)
         merkle_root = authority_setup.merkle_tree.root
         rsa_n = authority_setup.rsa_key.n
@@ -52,7 +53,8 @@ class TestUserRegistration:
     def test_merkle_path_verification(self, authority_setup):
         """Test that user can verify their Merkle path."""
         user_id = 'student1'
-        secret = get_random_bytes(32)
+        # Use the secret from the commitment-based setup
+        secret = authority_setup._test_user_secrets[user_id]['secret']
         merkle_path = authority_setup.get_user_merkle_path(0)
         merkle_root = authority_setup.merkle_tree.root
         rsa_n = authority_setup.rsa_key.n
@@ -69,7 +71,8 @@ class TestUserRegistration:
     def test_create_blinded_token(self, authority_setup):
         """Test creating blinded token."""
         user_id = 'student1'
-        secret = get_random_bytes(32)
+        # Use the secret from the commitment-based setup
+        secret = authority_setup._test_user_secrets[user_id]['secret']
         merkle_path = authority_setup.get_user_merkle_path(0)
         merkle_root = authority_setup.merkle_tree.root
         rsa_n = authority_setup.rsa_key.n
@@ -89,7 +92,8 @@ class TestUserRegistration:
     def test_unblind_signature(self, authority_setup):
         """Test unblinding signature."""
         user_id = 'student1'
-        secret = get_random_bytes(32)
+        # Use the secret from the commitment-based setup
+        secret = authority_setup._test_user_secrets[user_id]['secret']
         merkle_path = authority_setup.get_user_merkle_path(0)
         merkle_root = authority_setup.merkle_tree.root
         rsa_n = authority_setup.rsa_key.n
@@ -109,7 +113,8 @@ class TestUserRegistration:
     def test_verify_credential(self, authority_setup):
         """Test credential verification."""
         user_id = 'student1'
-        secret = get_random_bytes(32)
+        # Use the secret from the commitment-based setup
+        secret = authority_setup._test_user_secrets[user_id]['secret']
         merkle_path = authority_setup.get_user_merkle_path(0)
         merkle_root = authority_setup.merkle_tree.root
         rsa_n = authority_setup.rsa_key.n
@@ -129,7 +134,8 @@ class TestUserRegistration:
     def test_complete_registration_protocol(self, authority_setup):
         """Test complete registration protocol."""
         user_id = 'student1'
-        secret = get_random_bytes(32)
+        # Use the secret from the commitment-based setup
+        secret = authority_setup._test_user_secrets[user_id]['secret']
         merkle_path = authority_setup.get_user_merkle_path(0)
         merkle_root = authority_setup.merkle_tree.root
         rsa_n = authority_setup.rsa_key.n
@@ -149,7 +155,8 @@ class TestUserRegistration:
     def test_authority_never_learns_secret(self, authority_setup):
         """Test that authority never learns user secret during registration."""
         user_id = 'student1'
-        secret = get_random_bytes(32)
+        # Use the secret from the commitment-based setup
+        secret = authority_setup._test_user_secrets[user_id]['secret']
         merkle_path = authority_setup.get_user_merkle_path(0)
         merkle_root = authority_setup.merkle_tree.root
         rsa_n = authority_setup.rsa_key.n
@@ -172,8 +179,9 @@ class TestUserRegistration:
         """Test that different users get different credentials."""
         user1_id = 'student1'
         user2_id = 'student2'
-        secret1 = get_random_bytes(32)
-        secret2 = get_random_bytes(32)
+        # Use the secrets from the commitment-based setup
+        secret1 = authority_setup._test_user_secrets[user1_id]['secret']
+        secret2 = authority_setup._test_user_secrets[user2_id]['secret']
         
         merkle_path1 = authority_setup.get_user_merkle_path(0)
         merkle_path2 = authority_setup.get_user_merkle_path(1)
@@ -197,14 +205,15 @@ class TestUserRegistration:
     def test_invalid_merkle_path_rejected(self, authority_setup):
         """Test that invalid Merkle paths are rejected."""
         user_id = 'student1'
-        secret = get_random_bytes(32)
+        # Use the secret from the commitment-based setup
+        secret = authority_setup._test_user_secrets[user_id]['secret']
         # Use wrong Merkle path (for different user)
         wrong_merkle_path = authority_setup.get_user_merkle_path(1)
         merkle_root = authority_setup.merkle_tree.root
         rsa_n = authority_setup.rsa_key.n
         rsa_e = authority_setup.rsa_key.e
         
-        # This should raise an error because path doesn't match user_id
+        # This should raise an error because path doesn't match user_id + secret commitment
         with pytest.raises(ValueError, match="Invalid Merkle path"):
             UserRegistration(
                 user_id, secret, wrong_merkle_path, merkle_root, rsa_n, rsa_e

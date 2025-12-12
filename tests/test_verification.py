@@ -15,16 +15,15 @@ class TestSubmissionVerifier:
     
     @pytest.fixture
     def setup_complete(self):
-        """Setup complete protocol for testing."""
-        authority = AuthoritySetup(key_size=1024)
-        authority.generate_rsa_keys()
+        """Setup complete protocol for testing with commitment-based tree."""
+        from tests.conftest import setup_authority_with_commitments
+        
         user_ids = ['student1', 'student2']
-        authority.add_authorized_users(user_ids)
-        authority.build_merkle_tree()
+        authority, user_secrets = setup_authority_with_commitments(user_ids, key_size=1024)
         
         # Register user
         user_id = 'student1'
-        secret = get_random_bytes(32)
+        secret = user_secrets[user_id]['secret']
         merkle_path = authority.get_user_merkle_path(0)
         merkle_root = authority.merkle_tree.root
         rsa_n = authority.rsa_key.n
@@ -135,15 +134,14 @@ class TestBulletinBoard:
     
     @pytest.fixture
     def setup_complete(self):
-        """Setup complete protocol for testing."""
-        authority = AuthoritySetup(key_size=1024)
-        authority.generate_rsa_keys()
+        """Setup complete protocol for testing with commitment-based tree."""
+        from tests.conftest import setup_authority_with_commitments
+        
         user_ids = ['student1']
-        authority.add_authorized_users(user_ids)
-        authority.build_merkle_tree()
+        authority, user_secrets = setup_authority_with_commitments(user_ids, key_size=1024)
         
         user_id = 'student1'
-        secret = get_random_bytes(32)
+        secret = user_secrets[user_id]['secret']
         merkle_path = authority.get_user_merkle_path(0)
         merkle_root = authority.merkle_tree.root
         rsa_n = authority.rsa_key.n
